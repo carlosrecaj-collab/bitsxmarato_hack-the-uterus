@@ -11,8 +11,6 @@ from sklearn.cluster import KMeans
 ### NOU DATA SET (CARLOS)
 df_final = pd.read_csv("dataset_train_processat.csv")
 
-
-
 #########################################################################
 #                       MAPA DE CALOR (CORRELACIONS)                    #
 #########################################################################
@@ -166,3 +164,45 @@ print("El grup de més risc sera el grup 0 ")
 
 # --- VERIFICACIÓ DE LES NOVES DADES ---
 #----AQUÍ S'HA AFEGIT EL CLUSTER GROUP AL DATA SET"
+
+##################################################
+#       DISTANCIA EUCLIDIANA (SOFT CLUSTERING)   #
+##################################################
+
+print("\n" + "="*60)
+print(" CALCULANT DISTÀNCIES ALS CENTRES (SOFT CLUSTERING)")
+print("="*60)
+
+# 1. Calculem la matriu de distàncies
+# Això crea una matriu on cada fila té la distància al Grup 0 i al Grup 1
+distancies = kmeans.transform(X_scaled)
+
+# 2. Afegim les columnes al DataFrame
+for i in range(kmeans.n_clusters):
+    col_name = f'dist_cluster_{i}'
+    df_final[col_name] = distancies[:, i]
+    print(f" -> Variable creada: {col_name}")
+
+
+##################################################
+#           VERIFICACIÓ    i        GUARDAR      #
+##################################################
+
+print("\n" + "="*60)
+print(" ESTAT FINAL DEL DATASET (PRIMERES 5 FILES)")
+print("="*60)
+
+# Mostrem només les columnes noves per comprovar que s'han creat bé
+cols_noves = ['cluster_group', 'dist_cluster_0', 'dist_cluster_1']
+print(df_final[cols_noves].head())
+
+print("\n" + "="*60)
+print(" GUARDANT FITXER DEFINITIU...")
+print("="*60)
+
+# Guardem el CSV amb el nom nou
+df_final.to_csv("dataset_train_final_kmeans_euclidiana.csv", index=False)
+
+print(" Creat correctament.")
+print(" llest per al model.")
+
