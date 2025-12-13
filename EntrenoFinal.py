@@ -295,13 +295,15 @@ shap_values = explainer.shap_values(X_train_final)
 shap.summary_plot(shap_values, X_train_final)
 
 # Guardar Model i Objectes necessaris
+vars_kmeans_list = vars_kmeans if vars_kmeans else []
+
 joblib.dump({
     "model": calibrated_model,
-    "features": X_train_final.columns.tolist(),
+    "features": X_train_final.columns.tolist(), # Les columnes finals que espera el model
     "threshold": best_threshold,
     "kmeans": kmeans_final if vars_kmeans else None,
     "scaler": scaler_final if vars_kmeans else None,
-    "dropped_cols": dropped_final
+    "dropped_cols": dropped_final,
+    "vars_kmeans": vars_kmeans_list  # <--- AFEGIT IMPORTANT
 }, "xgb_clinic_model_robust.joblib")
-
 print("Model guardat correctament.")
