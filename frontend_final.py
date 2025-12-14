@@ -30,6 +30,37 @@ def load_artifacts():
         st.error("⚠️ Error crític: No s'ha trobat el fitxer 'xgb_clinic_model_robust.joblib'. Verifica el directori.")
         return None
 
+def get_alert_color(camp, valor):
+    """
+    Retorna color segons si el valor és normal, alerta o crític.
+    """
+    try:
+        v = float(valor)
+
+        # Exemple de regles numèriques genèriques
+        if v < 0:
+            return "#f44336", "❌ Valor invàlid"
+        elif camp.lower() in ["edat", "age"] and v > 80:
+            return "#ff9800", "⚠️ Edat elevada"
+        elif camp.lower() in ["imc", "bmi"] and v >= 30:
+            return "#f44336", "🔴 IMC alt"
+        elif camp.lower() in ["imc", "bmi"] and v >= 25:
+            return "#ff9800", "🟠 Sobrepès"
+        else:
+            return "#4caf50", None  # normal
+
+    except:
+        # Valors textuals
+        valor_str = str(valor).lower()
+
+        if valor_str in ["sí", "si", "true", "positivo", "positiu"]:
+            return "#f44336", "Positiu"
+        if valor_str in ["no", "false", "negativo", "negatiu"]:
+            return "#4caf50", None
+
+    return "#2196f3", None  # neutre
+
+
 def process_patient_prediction(row_data, artifacts):
     """
     Processa les dades d'un sol pacient, aplica enginyeria de característiques (KMeans),
@@ -118,11 +149,11 @@ if "page" not in st.session_state:
 # Menú de navegació superior
 nav = st.columns(3)
 with nav[0]:
-    if st.button("📊 Model", use_container_width=True): st.session_state.page = "modelo"
+    if st.button("Model", use_container_width=True): st.session_state.page = "modelo"
 with nav[1]:
-    if st.button("🔬 Pacient", use_container_width=True): st.session_state.page = "paciente"
+    if st.button("Pacient", use_container_width=True): st.session_state.page = "paciente"
 with nav[2]:
-    if st.button("📧 Contacte", use_container_width=True): st.session_state.page = "contacto"
+    if st.button("Contacte", use_container_width=True): st.session_state.page = "contacto"
 
 st.markdown("---")
 
@@ -138,7 +169,7 @@ page = st.session_state.page
 # PÀGINA 1: DASHBOARD DEL MODEL
 # =====================================================
 if page == "modelo":
-    st.header("📊 Rendiment del Model")
+    st.header("Rendiment del Model")
     
     # Recuperació de mètriques emmagatzemades o valors per defecte
     metrics_saved = artifacts.get('metrics', {}) if artifacts else {}
@@ -159,7 +190,7 @@ if page == "modelo":
 # PÀGINA 2: AVALUACIÓ DE PACIENTS
 # =====================================================
 elif page == "paciente":
-    st.header("🔬 Avaluació de Pacients")
+    st.header("Avaluació de Pacients")
     st.write("Carrega un fitxer CSV amb les dades clíniques per analitzar.")
 
     uploaded_file = st.file_uploader("Puja un fitxer CSV", type="csv")
@@ -188,16 +219,54 @@ elif page == "paciente":
             st.success(f"Anàlisi completada per a {len(df)} pacients.")
 
             # Pestanyes de visualització
-            tab1, tab2, tab3, tab4 = st.tabs([
-                "📋 Dades Generals",
-                "🤖 Predicció IA",
-                "🩺 Recomanacions",
-                "📈 Gràfics"
+            tab1, tab2, tab3 = st.tabs([
+                "Dades Generals",
+                "Predicció IA",
+                "Recomanacions",
             ])
 
             with tab1:
-                st.subheader("Dades clíniques carregades")
-                st.dataframe(df)
+                st.subheader("🩺 Dades clíniques del pacient")
+
+                # Columnes laterals per limitar amplada
+                left, center, right = st.columns([1, 3, 1])
+
+                with center:
+                    fila = df.iloc[0]
+                    col1, col2 = st.columns(2)
+
+                    for i, (camp, valor) in enumerate(fila.items()):
+                        color, alerta = get_alert_color(camp, valor)
+                        target = col1 if i % 2 == 0 else col2
+
+                        target.markdown(
+                            f"""
+                            <div style="
+                                background-color: #1e1e1e;
+                                padding: 14px;
+                                margin-bottom: 12px;
+                                border-radius: 12px;
+                                border-left: 5px solid {color};
+                            ">
+                                <div style="color:#aaaaaa; font-size: 13px;">
+                                    {camp}
+                                </div>
+                                <div style="font-size: 17px; font-weight: 600; color:{color};">
+                                    {valor}
+                                </div>
+                                {"<div style='font-size:12px; color:#ffcc80;'>" + alerta + "</div>" if alerta else ""}
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+                    st.markdown("""
+                    **Llegenda:**
+                    🟥 Vermell: Valor crític  
+                    🟨 Groc: Valor a revisar  
+                    🟩 Verd: Valor normal  
+                    """)
+
 
             with tab2:
                 st.subheader("Anàlisi de Risc Individual")
@@ -219,43 +288,107 @@ elif page == "paciente":
                     st.divider()
 
             with tab3:
-                st.subheader("Recomanacions Clíniques")
-                threshold = artifacts.get('threshold', 0.5)
+                st.subheader("Recomanacions Clíniques Basades en Pràctica Assistencial")
 
                 for idx, row in df.iterrows():
-                    with st.expander(f"Pacient {idx+1} ({row['prob_recidiva']:.1%})"):
-                        rec = []
-                        
-                        # Lògica de regles de negoci basada en el risc
-                        if row['prob_recidiva'] > 0.60:
-                            rec.append("🔴 **Prioritat Alta:** Derivació urgent a oncologia i proves d'imatge.")
-                        elif row['prob_recidiva'] > threshold:
-                            rec.append("🟠 **Risc Moderat:** Seguiment estret trimestral.")
-                        else:
-                            rec.append("🟢 **Risc Baix:** Controls rutinaris.")
-                        
-                        # Exemple de regla addicional (IMC)
-                        if 'imc' in row and row['imc'] > 30:
-                            rec.append("📉 **Nutrició:** Es recomana pla de pèrdua de pes (IMC > 30).")
-                        
-                        rec.append(f"ℹ️ **Atenció a:** {row['factor_principal']} (Factor determinant segons SHAP).")
-                        
-                        for r in rec:
-                            st.write(r)
+                    risc = row['prob_recidiva']
 
-            with tab4:
-                st.subheader("Visió Global de la Cohort") 
-                
-                c1, c2 = st.columns(2)
-                
-                with c1:
-                    st.write("**Distribució de Risc (Probabilitat)**")
-                    st.bar_chart(df['prob_recidiva'])
-                
-                with c2:
-                    st.write("**Classificació (Recidiva vs No)**")
-                    counts = df['pred_clase'].map({0: 'Baix Risc', 1: 'Alt Risc'}).value_counts()
-                    st.bar_chart(counts)
+                    # ---- TARJETA PRINCIPAL DEL PACIENTE ----
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color:#1e1e1e;
+                            padding:20px;
+                            border-radius:16px;
+                            margin-bottom:24px;
+                            border-left:6px solid {'#f44336' if risc>=0.6 else '#ff9800' if risc>=0.4 else '#4caf50'};
+                        ">
+                            <h3 style="margin-bottom:5px;">
+                                Pacient {idx+1}
+                            </h3>
+                            <p style="color:#cccccc; font-size:15px;">
+                                Risc estimat de recidiva: <b>{risc:.1%}</b>
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    # ---- BLOQUE 1: NIVEL DE RIESGO ----
+                    if risc >= 0.60:
+                        st.error("""
+                        🔴 **Risc Alt**
+                        - Derivació urgent a Oncologia Ginecològica.
+                        - Discussió en Comitè Multidisciplinari de Tumors.
+                        """)
+                    elif risc >= 0.40:
+                        st.warning("""
+                        🟠 **Risc Intermedi**
+                        - Seguiment especialitzat per ginecologia oncològica.
+                        - Controls clínics i radiològics semestrals.
+                        """)
+                    else:
+                        st.success("""
+                        🟢 **Risc Baix**
+                        - Seguiment rutinari segons protocols estàndard.
+                        - Educació en símptomes d'alarma.
+                        """)
+
+                    # ---- BLOQUE 2: PRUEBAS DIAGNÓSTICAS ----
+                    st.markdown("### Proves Diagnòstiques Recomanades")
+                    st.write("""
+                    - **Ecografia transvaginal** per valoració inicial de l'endometri.
+                    - **Biòpsia endometrial** (pipelle o histeroscòpia) si hi ha sospita clínica.
+                    - **RM pèlvica** per estudiar invasió miometrial i extensió local.
+                    - **TC toracoabdominal** en risc intermedi-alt o sospita de disseminació.
+                    - **Estudi anatomopatològic complet** (tipus histològic i grau).
+                    """)
+
+                    # ---- BLOQUE 3: FACTORES CLÍNICOS ----
+                    st.markdown("### Factors Clínics a Optimitzar")
+
+                    factors = False
+
+                    if 'imc' in row and row['imc'] >= 30:
+                        st.write("🔸 **Obesitat:** Recomanable intervenció nutricional estructurada.")
+                        factors = True
+                    if 'diabetis' in row and str(row['diabetis']).lower() in ["si", "sí", "true", "1"]:
+                        st.write("🔸 **Diabetis:** Optimitzar control glucèmic (HbA1c).")
+                        factors = True
+                    if 'hipertensio' in row and str(row['hipertensio']).lower() in ["si", "sí", "true", "1"]:
+                        st.write("🔸 **Hipertensió:** Ajust i seguiment del tractament.")
+                        factors = True
+
+                    if not factors:
+                        st.write("No es detecten factors clínics modificables rellevants.")
+
+                    # ---- BLOQUE 4: SEGUIMIENTO ----
+                    st.markdown("### Pla de Seguiment Orientatiu")
+
+                    if risc >= 0.60:
+                        st.write("""
+                        - Revisió cada **3 mesos** els primers 2 anys.
+                        - Exploració ginecològica completa en cada visita.
+                        - Proves d'imatge segons criteri clínic.
+                        """)
+                    elif risc >= 0.40:
+                        st.write("""
+                        - Revisió cada **6 mesos**.
+                        - Exploració clínica + ecografia segons indicació.
+                        """)
+                    else:
+                        st.write("""
+                        - Revisió **anual**.
+                        - Informar sobre sagnat postmenopàusic o dolor pèlvic.
+                        """)
+
+                    st.info(
+                        "ℹRecomanacions orientatives basades en pràctica clínica habitual "
+                        "i guies de maneig del càncer d'endometri. "
+                        "La decisió final correspon sempre a l'equip mèdic responsable."
+                    )
+
+                    st.markdown("---")
 
         except Exception as e:
             st.error(f"Error processant el fitxer: {e}")
